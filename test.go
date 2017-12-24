@@ -1,5 +1,6 @@
 package main
 
+//degrade message from Sasha
 import (
 	"flag"
 	"fmt"
