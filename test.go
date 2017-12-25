@@ -2,110 +2,65 @@ package main
 
 //not degrade message from Sasha
 import (
-	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
+	"os/exec"
 
 	"google.golang.org/api/googleapi/transport"
 	"google.golang.org/api/youtube/v3"
 )
 
-var (
-	query      = enterRequest("lil peep")
-	maxResults = setMaxResult(2)
-)
-
-// Video implementation
-type Video struct {
-	Title     string
-	url       string
-	quality   string
-	extension string
+// Operator main worker of programm
+type Operator struct {
+	client  *http.Client
+	service *youtube.Service
 }
 
 const developerKey = "AIzaSyALx7GChiavVgDs_VGNdTcpyU6P6MufRt8"
 
 func main() {
-	flag.Parse()
-	client := &http.Client{
-		Transport: &transport.APIKey{Key: developerKey},
-	}
-
-	service, err := youtube.New(client)
+	operator, err := initOperator(developerKey)
 	if err != nil {
-		log.Fatalf("Error creating new YouTube search: %v", err)
+		log.Panic(err)
 	}
+	videos := operator.search("lil peep", 5)
+	printSR(videos)
+	for id, item := range videos {
+		title := item.Snippet.Title
+		yloader("C:/selflearning/"+title, id, "FLAC")
+	}
+}
 
-	// Make the API call to YouTube
-	call := service.Search.List("id, snippet").Q(*query).MaxResults(*maxResults)
-	response, err := call.Do()
+// search for limited amount of results
+func (op Operator) search(target string, lim int64) map[string]*youtube.SearchResult {
+	call := op.service.Search.List("id, snippet").Q(target).MaxResults(lim)
+	resp, err := call.Do()
 	if err != nil {
-		log.Fatalf("Error making search API call: %v", err)
+		log.Panic(err)
 	}
-
-	// Group video, channel and playlist results to separate lists.
-	videos := make(map[string]string)
-	channels := make(map[string]string)
-	playlist := make(map[string]string)
-
-	// Iterate through each item and add it to the correct list.
-	for _, item := range response.Items {
-		switch item.Id.Kind {
-		case "youtube#video":
-			videos[item.Id.VideoId] = item.Snippet.Title
-		case "youtube#channel":
-			channels[item.Id.ChannelId] = item.Snippet.Title
-		case "youtube#playlist":
-			playlist[item.Id.PlaylistId] = item.Snippet.Title
+	videos := make(map[string]*youtube.SearchResult)
+	for _, item := range resp.Items {
+		if item.Id.Kind == "youtube#video" {
+			videos[item.Id.VideoId] = item
 		}
 	}
-
-	prinIDs("Videos", videos)
-	prinIDs("Channels", channels)
-	prinIDs("Playlists", playlist)
-	download("C0DPdy98e4c", "C:\\selflearning\\lol.mp4")
+	return videos
 }
 
-// Print ID and title of each result in a list as well as a name that
-// identifies the list. For example, print the word section "Videos"
-// above a list of video search results, followed by the video ID and title
-// of each matching video.
-func prinIDs(sectionName string, matches map[string]string) {
-	fmt.Printf("%v:\n", sectionName)
-	for id, title := range matches {
-		fmt.Printf("[%v] %v\n", id, title)
+// create new Operator
+func initOperator(devKey string) (Operator, error) {
+	client := &http.Client{
+		Transport: &transport.APIKey{Key: devKey},
 	}
-	fmt.Printf("\n\n")
+	service, err := youtube.New(client)
+	return Operator{client, service}, err
 }
 
-func handleError(err error) {
-	if err != nil {
-		fmt.Printf("Error occured: %v", err)
+func printSR(matches map[string]*youtube.SearchResult) {
+	for id, item := range matches {
+		fmt.Printf("[%s] %v\n", id, item.Snippet.Title)
 	}
-}
-
-func enterRequest(req string) *string {
-	return flag.String("query", req, "Search term")
-}
-
-func setMaxResult(lim int64) *int64 {
-	return flag.Int64("max-results", lim, "Max YouTube results")
-}
-
-// GetHTTPFromURL initialize a GET request
-func GetHTTPFromURL(url string) (body io.ReadCloser, err error) {
-	response, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	body = response.Body
-	if err != nil {
-		return nil, err
-	}
-	return body, err
 }
 
 // URLbyID id -> url
@@ -113,19 +68,14 @@ func URLbyID(id string) string {
 	return "https://youtu.be/" + id
 }
 
-func download(id, fname string) {
+func yloader(path, id, format string) {
+	destPath := path + "." + format
 	url := URLbyID(id)
-	body, err := GetHTTPFromURL(url)
-	defer body.Close()
-	handleError(err)
-
-	output, err := os.Create(fname)
-	handleError(err)
-
-	n, err := io.Copy(output, body)
-	handleError(err)
-
-	fmt.Println(n, "bytes downloaded")
+	cmd := exec.Command("youtube-dl", "-o", destPath, url)
+	err := cmd.Run()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 //https://youtu.be/WvV5TbJc9tQ
