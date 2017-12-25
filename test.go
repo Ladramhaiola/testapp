@@ -20,15 +20,22 @@ type Operator struct {
 const developerKey = "AIzaSyALx7GChiavVgDs_VGNdTcpyU6P6MufRt8"
 
 func main() {
+	c := make(chan string)
 	operator, err := initOperator(developerKey)
 	if err != nil {
 		log.Panic(err)
 	}
+
 	videos := operator.search("lil peep", 5)
 	printSR(videos)
+
 	for id, item := range videos {
 		title := item.Snippet.Title
-		yloader("C:/selflearning/"+title, id, "FLAC")
+		go yloader("C:/selflearning/"+title, id, "FLAC", c)
+	}
+
+	for i := 0; i <= len(videos); i++ {
+		fmt.Println(<-c)
 	}
 }
 
@@ -57,6 +64,7 @@ func initOperator(devKey string) (Operator, error) {
 	return Operator{client, service}, err
 }
 
+// print search results
 func printSR(matches map[string]*youtube.SearchResult) {
 	for id, item := range matches {
 		fmt.Printf("[%s] %v\n", id, item.Snippet.Title)
@@ -68,14 +76,14 @@ func URLbyID(id string) string {
 	return "https://youtu.be/" + id
 }
 
-func yloader(path, id, format string) {
+func yloader(path, id, format string, c chan string) {
 	destPath := path + "." + format
 	url := URLbyID(id)
 	cmd := exec.Command("youtube-dl", "-o", destPath, url)
 	err := cmd.Run()
 	if err != nil {
-		log.Fatal(err)
+		c <- "error"
+	} else {
+		c <- "done"
 	}
 }
-
-//https://youtu.be/WvV5TbJc9tQ
