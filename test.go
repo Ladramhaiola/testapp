@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"time"
 
 	"google.golang.org/api/googleapi/transport"
 	"google.golang.org/api/youtube/v3"
@@ -17,6 +18,12 @@ type Operator struct {
 	service *youtube.Service
 }
 
+type audio struct {
+	path   string
+	format string
+	body   *youtube.SearchResult
+}
+
 const developerKey = "AIzaSyALx7GChiavVgDs_VGNdTcpyU6P6MufRt8"
 
 func main() {
@@ -26,17 +33,30 @@ func main() {
 		log.Panic(err)
 	}
 
-	videos := operator.search("lil peep", 5)
+	searchList := []string{"lil peep"}
+	for _, item := range searchList {
+		go transfer(operator, "C:/Users/andri/Music/", "mp3", item, c)
+	}
+
+	for i := 0; i < len(searchList); i++ {
+		fmt.Println(<-c)
+	}
+}
+
+// complete process of downloading
+func transfer(op Operator, path, format, target string, c chan string) {
+	ic := make(chan string)
+	videos := op.search(target, 4)
 	printSR(videos)
 
 	for id, item := range videos {
-		title := item.Snippet.Title
-		go yloader("C:/selflearning/"+title, id, "FLAC", c)
+		go yloader(path+item.Snippet.Title, id, format, ic)
 	}
 
-	for i := 0; i <= len(videos); i++ {
-		fmt.Println(<-c)
+	for i := 0; i < len(videos); i++ {
+		fmt.Println(<-ic)
 	}
+	c <- "done in " + time.Now().String()
 }
 
 // search for limited amount of results
@@ -73,16 +93,23 @@ func printSR(matches map[string]*youtube.SearchResult) {
 
 // URLbyID id -> url
 func URLbyID(id string) string {
-	return "https://youtu.be/" + id
+	return "https://www.youtube.com/watch?v=" + id
 }
 
+// load worker
 func yloader(path, id, format string, c chan string) {
 	destPath := path + "." + format
 	url := URLbyID(id)
-	cmd := exec.Command("youtube-dl", "-o", destPath, url)
+	var cmd *exec.Cmd
+	if format == "mp3" {
+		cmd = exec.Command("youtube-dl", "-o", destPath, "--extract-audio", "--audio-format", "mp3", url)
+	} else {
+		cmd = exec.Command("youtube-dl", "-o", destPath, url)
+	}
+
 	err := cmd.Run()
 	if err != nil {
-		c <- "error"
+		c <- "error " + err.Error()
 	} else {
 		c <- "done"
 	}
