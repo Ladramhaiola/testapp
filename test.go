@@ -12,7 +12,7 @@ import (
 	"google.golang.org/api/youtube/v3"
 )
 
-// Operator main worker of programm
+// Operator is a core worker of package
 type Operator struct {
 	client  *http.Client
 	service *youtube.Service
@@ -53,7 +53,7 @@ func (op Operator) transfer(path, format, target string, lim int64, c chan strin
 	c <- "done in " + time.Now().String()
 }
 
-// search for limited amount of results
+// search for limited amount of results by tag string
 func (op Operator) search(target string, lim int64) map[string]*youtube.SearchResult {
 	call := op.service.Search.List("id, snippet").Q(target).MaxResults(lim)
 	resp, err := call.Do()
@@ -86,11 +86,9 @@ func printSR(matches map[string]*youtube.SearchResult) {
 }
 
 // URLbyID id -> url
-func URLbyID(id string) string {
-	return "https://www.youtube.com/watch?v=" + id
-}
+func URLbyID(id string) string { return "https://www.youtube.com/watch?v=" + id }
 
-// load worker
+// download worker. Uses youtube-dl.exe for downloading from YouTube
 func dWorker(path, id, format string, c chan string) {
 	destPath := path + "." + format
 	url := URLbyID(id)
