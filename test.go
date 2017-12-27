@@ -18,24 +18,18 @@ type Operator struct {
 	service *youtube.Service
 }
 
-type audio struct {
-	path   string
-	format string
-	body   *youtube.SearchResult
-}
-
 const developerKey = "AIzaSyALx7GChiavVgDs_VGNdTcpyU6P6MufRt8"
 
 func main() {
 	c := make(chan string)
-	operator, err := initOperator(developerKey)
+	operator, err := newOperator(developerKey)
 	if err != nil {
 		log.Panic(err)
 	}
 
 	searchList := []string{"lil peep"}
 	for _, item := range searchList {
-		go transfer(operator, "C:/Users/andri/Music/", "mp3", item, c)
+		go operator.transfer("C:/Users/andri/Music/", "mp3", item, 4, c)
 	}
 
 	for i := 0; i < len(searchList); i++ {
@@ -44,17 +38,17 @@ func main() {
 }
 
 // complete process of downloading
-func transfer(op Operator, path, format, target string, c chan string) {
-	ic := make(chan string)
-	videos := op.search(target, 4)
+func (op Operator) transfer(path, format, target string, lim int64, c chan string) {
+	insc := make(chan string)
+	videos := op.search(target, lim)
 	printSR(videos)
 
 	for id, item := range videos {
-		go yloader(path+item.Snippet.Title, id, format, ic)
+		go dWorker(path+item.Snippet.Title, id, format, insc)
 	}
 
 	for i := 0; i < len(videos); i++ {
-		fmt.Println(<-ic)
+		fmt.Println(<-insc)
 	}
 	c <- "done in " + time.Now().String()
 }
@@ -76,7 +70,7 @@ func (op Operator) search(target string, lim int64) map[string]*youtube.SearchRe
 }
 
 // create new Operator
-func initOperator(devKey string) (Operator, error) {
+func newOperator(devKey string) (Operator, error) {
 	client := &http.Client{
 		Transport: &transport.APIKey{Key: devKey},
 	}
@@ -97,10 +91,11 @@ func URLbyID(id string) string {
 }
 
 // load worker
-func yloader(path, id, format string, c chan string) {
+func dWorker(path, id, format string, c chan string) {
 	destPath := path + "." + format
 	url := URLbyID(id)
 	var cmd *exec.Cmd
+
 	if format == "mp3" {
 		cmd = exec.Command("youtube-dl", "-o", destPath, "--extract-audio", "--audio-format", "mp3", url)
 	} else {
